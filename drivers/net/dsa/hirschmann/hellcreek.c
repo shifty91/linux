@@ -221,11 +221,13 @@ static void hellcreek_feature_detect(struct hellcreek *hellcreek)
 
 	features = hellcreek_read(hellcreek, HR_FEABITS0);
 
-	/* Only detect the size of the FDB table. The size and current
-	 * utilization can be queried via devlink.
+	/* Detect the FDB table size and the maximum RAM page count. The size
+	 * and current utilization can be queried via devlink.
 	 */
 	hellcreek->fdb_entries = ((features & HR_FEABITS0_FDBBINS_MASK) >>
-			       HR_FEABITS0_FDBBINS_SHIFT) * 32;
+				  HR_FEABITS0_FDBBINS_SHIFT) * 32;
+	hellcreek->page_count  = ((features & HR_FEABITS0_PCNT_MASK) >>
+				  HR_FEABITS0_PCNT_SHIFT) * 32;
 }
 
 static enum dsa_tag_protocol hellcreek_get_tag_protocol(struct dsa_switch *ds,
@@ -1128,10 +1130,23 @@ static u64 hellcreek_devlink_fdb_table_get(void *priv)
 	return count;
 }
 
+static u64 hellcreek_devlink_ram_usage_get(void *priv)
+{
+	struct hellcreek *hellcreek = priv;
+	u64 usage = 0;
+
+	/* Indicates how many free ram pages are available. */
+	usage = hellcreek_read(hellcreek, HR_PFREE);
+	usage = hellcreek->page_count - usage;
+
+	return usage;
+}
+
 static int hellcreek_setup_devlink_resources(struct dsa_switch *ds)
 {
 	struct devlink_resource_size_params size_vlan_params;
 	struct devlink_resource_size_params size_fdb_params;
+	struct devlink_resource_size_params size_ram_params;
 	struct hellcreek *hellcreek = ds->priv;
 	int err;
 
@@ -1142,6 +1157,11 @@ static int hellcreek_setup_devlink_resources(struct dsa_switch *ds)
 	devlink_resource_size_params_init(&size_fdb_params,
 					  hellcreek->fdb_entries,
 					  hellcreek->fdb_entries,
+					  1, DEVLINK_RESOURCE_UNIT_ENTRY);
+
+	devlink_resource_size_params_init(&size_ram_params,
+					  hellcreek->page_count,
+					  hellcreek->page_count,
 					  1, DEVLINK_RESOURCE_UNIT_ENTRY);
 
 	err = dsa_devlink_resource_register(ds, "VLAN", VLAN_N_VID,
@@ -1158,6 +1178,13 @@ static int hellcreek_setup_devlink_resources(struct dsa_switch *ds)
 	if (err)
 		goto out;
 
+	err = dsa_devlink_resource_register(ds, "RAM", hellcreek->page_count,
+					    HELLCREEK_DEVLINK_PARAM_ID_RAM_USAGE,
+					    DEVLINK_RESOURCE_ID_PARENT_TOP,
+					    &size_ram_params);
+	if (err)
+		goto out;
+
 	dsa_devlink_resource_occ_get_register(ds,
 					      HELLCREEK_DEVLINK_PARAM_ID_VLAN_TABLE,
 					      hellcreek_devlink_vlan_table_get,
@@ -1166,6 +1193,11 @@ static int hellcreek_setup_devlink_resources(struct dsa_switch *ds)
 	dsa_devlink_resource_occ_get_register(ds,
 					      HELLCREEK_DEVLINK_PARAM_ID_FDB_TABLE,
 					      hellcreek_devlink_fdb_table_get,
+					      hellcreek);
+
+	dsa_devlink_resource_occ_get_register(ds,
+					      HELLCREEK_DEVLINK_PARAM_ID_RAM_USAGE,
+					      hellcreek_devlink_ram_usage_get,
 					      hellcreek);
 
 	return 0;
