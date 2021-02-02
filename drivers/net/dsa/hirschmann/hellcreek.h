@@ -289,6 +289,7 @@ struct hellcreek {
 	u16 status_out;		/* ptp.status_out shadow */
 	size_t fdb_entries;
 	size_t page_count;
+	size_t meta_count;
 };
 
 /* A Qbv schedule can only started up to 8 seconds in the future. If the delta
@@ -306,6 +307,7 @@ enum hellcreek_devlink_resource_id {
 	HELLCREEK_DEVLINK_PARAM_ID_VLAN_TABLE,
 	HELLCREEK_DEVLINK_PARAM_ID_FDB_TABLE,
 	HELLCREEK_DEVLINK_PARAM_ID_RAM_USAGE,
+	HELLCREEK_DEVLINK_PARAM_ID_METADATA_USAGE,
 };
 
 struct hellcreek_devlink_vlan_entry {
